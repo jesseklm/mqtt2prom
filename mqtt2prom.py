@@ -1,0 +1,94 @@
+import asyncio
+import json
+import logging
+import signal
+
+import httpcore
+from httpcore import ConnectError
+
+from config import get_first_config
+from mqtt_handler import MqttHandler
+
+__version__ = '0.0.1'
+
+
+class Mqtt2Prom:
+    def __init__(self):
+        self.config = get_first_config()
+        self.setup_logging()
+        self.metric_url = self.config['prom_import_url']
+        self.mqtt_handler: MqttHandler = MqttHandler(self.config['mqtt'], self.handle_mqtt_message)
+
+    def setup_logging(self):
+        if 'logging' in self.config:
+            logging_level_name: str = self.config['logging'].upper()
+            logging_level: int = logging.getLevelNamesMapping().get(logging_level_name, logging.NOTSET)
+            if logging_level != logging.NOTSET:
+                logging.getLogger().setLevel(logging_level)
+            else:
+                logging.warning(f'unknown logging level: %s.', logging_level)
+
+    async def handle_mqtt_message(self, topic: str, payload: str):
+        logging.debug('handle topic: %s, payload: %s', topic, payload)
+        topic_options = self.config['mqtt']['topics'].get(topic, {})
+        topic_type = topic_options.get('type', 'raw')
+        topic = topic.replace('/', '_')
+        if topic_type == 'raw':
+            await self.send_metric(topic, payload)
+        elif topic_type == 'json':
+            data = json.loads(payload)
+            if 'json_filter' in topic_options:
+                json_filter = topic_options.get('json_filter', {})
+                for key in list(data.keys()):
+                    if key not in json_filter:
+                        data.pop(key)
+            for key, value in data.items():
+                await self.send_metric(f'{topic}_{key}', value)
+
+    async def send_metric(self, metric_name: str, value: str) -> str:
+        async with httpcore.AsyncConnectionPool() as http:
+            try:
+                content = f'{metric_name} {value}'
+                response = await http.request(
+                    method='POST',
+                    url=self.metric_url,
+                    content=content.encode()
+                )
+                return response.content.decode()
+            except ConnectError as e:
+                logging.warning(f'{e=}, {content=}')
+            except Exception as e:
+                logging.error(f'{e=}, {content=}')
+            return ''
+
+    async def exit(self):
+        await self.mqtt_handler.disconnect()
+
+
+async def main():
+    mqtt2prom = Mqtt2Prom()
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def shutdown_handler():
+        stop_event.set()
+
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, shutdown_handler)
+    except NotImplementedError:
+        pass
+    try:
+        await stop_event.wait()
+    except asyncio.CancelledError:
+        logging.info('exiting.')
+    finally:
+        await mqtt2prom.exit()
+        logging.info('exited.')
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.getLogger('gmqtt').setLevel(logging.ERROR)
+    logging.info(f'starting Mqtt2Prom v%s.', __version__)
+    asyncio.run(main())

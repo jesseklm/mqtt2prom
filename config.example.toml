@@ -1,0 +1,14 @@
+logging = "debug"
+prom_import_url = "http://127.0.0.1:8428/api/v1/import/prometheus"
+
+[mqtt]
+server = "192.168.0.10"
+port = 1883
+username = "user"
+password = "pass"
+
+[mqtt.topics."sensor/123/temp"]
+
+[mqtt.topics."sensor/xyz"]
+type = "json"
+json_filter = ["temp", "hum"]

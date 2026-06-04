@@ -11,4 +11,4 @@ password = "pass"
 
 [mqtt.topics."sensor/xyz"]
 type = "json"
-json_filter = ["temp", "hum"]
+json_filter = ["temp", "hum", "sensor.uptime"]

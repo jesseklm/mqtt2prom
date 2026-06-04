@@ -9,7 +9,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 
 
 class Mqtt2Prom:
@@ -37,11 +37,18 @@ class Mqtt2Prom:
             await self.send_metric(topic, payload)
         elif topic_type == 'json':
             data = json.loads(payload)
-            if 'json_filter' in topic_options:
-                json_filter = topic_options.get('json_filter', {})
-                for key in list(data.keys()):
-                    if key not in json_filter:
-                        data.pop(key)
+            json_filter = topic_options.get('json_filter')
+            if json_filter:
+                data_override = {}
+                for key in json_filter:
+                    value = data
+                    for part in key.split('.'):
+                        if not isinstance(value, dict) or part not in value:
+                            break
+                        value = value[part]
+                    else:
+                        data_override[key.replace('.', '_')] = value
+                data = data_override
             for key, value in data.items():
                 await self.send_metric(f'{topic}_{key}', value)
 

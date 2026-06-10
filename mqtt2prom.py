@@ -10,7 +10,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '0.0.4'
+__version__ = '0.0.5'
 
 
 class Mqtt2Prom:
@@ -33,21 +33,22 @@ class Mqtt2Prom:
         logging.debug('handle topic: %s, payload: %s', topic, payload)
         topic_options = self.config['mqtt']['topics'].get(topic, {})
         if not topic_options:
-            for topic, topic_data in self.config['mqtt']['topics'].items():
+            for config_topic, topic_data in list(self.config['mqtt']['topics'].items()):
                 if 'regex' not in topic_data:
                     continue
-                pattern = re.escape(topic).replace(r'\+', r'([^/]+)')
+                pattern = re.escape(config_topic).replace(r'\+', r'([^/]+)')
                 match = re.fullmatch(pattern, topic)
                 if not match:
                     continue
                 topic_options = {k: v for k, v in topic_data.items() if k != 'regex'}
+                topic_options['metric_name'] = config_topic.replace('/+', '').replace('/', '_')
                 topic_options['label'] = f'{{{topic_data["regex"]}="{match.group(1)}"}}'
                 self.config['mqtt']['topics'][topic] = topic_options
         topic_type = topic_options.get('type', 'raw')
         topic_label = topic_options.get('label', '')
-        topic = topic.replace('/', '_')
+        metric_name = topic_options.get('metric_name', topic).replace('/', '_')
         if topic_type == 'raw':
-            await self.send_metric(topic, payload, topic_label)
+            await self.send_metric(metric_name, payload, topic_label)
         elif topic_type == 'json':
             data = json.loads(payload)
             json_filter = topic_options.get('json_filter')
@@ -63,12 +64,15 @@ class Mqtt2Prom:
                         data_override[key.replace('.', '_')] = value
                 data = data_override
             for key, value in data.items():
-                await self.send_metric(f'{topic}_{key}', value, topic_label)
+                await self.send_metric(f'{metric_name}_{key}', value, topic_label)
 
     async def send_metric(self, metric_name: str, value: str, label: str) -> str:
+        content = f'{metric_name}{label} {value}\n'
+        if not self.metric_url:
+            logging.debug('send metric: %s', content.strip())
+            return ''
         async with httpcore.AsyncConnectionPool() as http:
             try:
-                content = f'{metric_name}{label} {value}\n'
                 response = await http.request(
                     method='POST',
                     url=self.metric_url,

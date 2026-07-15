@@ -44,6 +44,8 @@ class Mqtt2Prom:
                 topic_options['metric_name'] = config_topic.replace('/+', '').replace('/', '_')
                 topic_options['label'] = f'{{{topic_data["regex"]}="{match.group(1)}"}}'
                 self.config['mqtt']['topics'][topic] = topic_options
+        if not topic_options:
+            logging.warning(f'unknown!: {topic}:{payload}')
         topic_type = topic_options.get('type', 'raw')
         topic_label = topic_options.get('label', '')
         metric_name = topic_options.get('metric_name', topic).replace('/', '_')

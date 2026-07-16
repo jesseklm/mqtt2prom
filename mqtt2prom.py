@@ -10,7 +10,7 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '0.0.5'
+__version__ = '0.0.6'
 
 
 class Mqtt2Prom:
@@ -54,19 +54,24 @@ class Mqtt2Prom:
         elif topic_type == 'json':
             data = json.loads(payload)
             json_filter = topic_options.get('json_filter')
+            json_names = topic_options.get('json_names')
             if json_filter:
                 data_override = {}
-                for key in json_filter:
+                for i, key in enumerate(json_filter):
                     value = data
                     for part in key.split('.'):
                         if not isinstance(value, dict) or part not in value:
                             break
                         value = value[part]
                     else:
-                        data_override[key.replace('.', '_')] = value
+                        output_key = json_names[i] if json_names else key.replace('.', '_')
+                        data_override[output_key] = value
                 data = data_override
             for key, value in data.items():
-                await self.send_metric(f'{metric_name}_{key}', value, topic_label)
+                if json_key_label := topic_options.get('json_key_label'):
+                    await self.send_metric(metric_name, value, f'{{{json_key_label}="{key}"}}')
+                else:
+                    await self.send_metric(f'{metric_name}_{key}', value, topic_label)
 
     async def send_metric(self, metric_name: str, value: str, label: str) -> str:
         content = f'{metric_name}{label} {value}\n'

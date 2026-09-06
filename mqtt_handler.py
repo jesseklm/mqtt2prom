@@ -19,7 +19,13 @@ def get_home_assistant_mqtt() -> dict:
         method='GET',
     )
     with urllib.request.urlopen(request, timeout=10) as response:
-        return json.load(response)
+        result = json.load(response)
+    if result.get('result') == 'error':
+        raise RuntimeError(f'Failed to get Home Assistant MQTT service: {result.get("message", "unknown error")}')
+    mqtt_config = result.get('data', result)
+    if 'host' not in mqtt_config:
+        raise RuntimeError(f'Invalid Home Assistant MQTT service response: {result}')
+    return mqtt_config
 
 
 class MqttHandler:

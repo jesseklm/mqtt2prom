@@ -1,16 +1,42 @@
 import hashlib
+import json
 import logging
+import os
+import urllib.request
 
 from gmqtt import Client as MQTTClient, Message, Subscription
 
 from background_tasks import run_in_background
 
+USE_HOME_ASSISTANT_MQTT = os.getenv('USE_HOME_ASSISTANT_MQTT', '').lower() in {'1', 'true', 'yes'}
+
+
+def get_home_assistant_mqtt() -> dict:
+    token = os.environ['SUPERVISOR_TOKEN']
+    request = urllib.request.Request(
+        'http://supervisor/services/mqtt',
+        headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+        method='GET',
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)
+
 
 class MqttHandler:
     def __init__(self, config: dict, message_callback=None) -> None:
+        if USE_HOME_ASSISTANT_MQTT:
+            ha_config = get_home_assistant_mqtt()
+            self.host: str = ha_config['host']
+            self.port: int = ha_config['port']
+            username: str = ha_config['username']
+            password: str = ha_config['password']
+        else:
+            self.host: str = config['server']
+            self.port: int = config.get('port', 1883)
+            username: str = config['username']
+            password: str = config['password']
+        logging.info('mqtt: connecting to %s:%s as %s.', self.host, self.port, username)
         self.topic_prefix: str = config.get('topic', 'mqtt2prom/').rstrip('/') + '/'
-        self.host: str = config['server']
-        self.port: int = config.get('port', 1883)
         self.subscriptions = []
         sub_topics = config.get('topics')
         if sub_topics:
@@ -25,7 +51,7 @@ class MqttHandler:
         self.mqttc.on_connect = self.on_connect
         self.mqttc.on_disconnect = self.on_disconnect
         self.mqttc.on_message = self.on_message
-        self.mqttc.set_auth_credentials(config['username'], config['password'])
+        self.mqttc.set_auth_credentials(username, password)
         run_in_background(self.connect())
 
     def on_connect(self, client: MQTTClient, flags, rc, properties):

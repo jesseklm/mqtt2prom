@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import signal
+import tomllib
+from pathlib import Path
 
 import httpcore
 from httpcore import ConnectError
@@ -10,7 +12,8 @@ from httpcore import ConnectError
 from config import get_first_config
 from mqtt_handler import MqttHandler
 
-__version__ = '0.0.6'
+with (Path(__file__).parent / 'pyproject.toml').open('rb') as f:
+    __version__ = tomllib.load(f)['project']['version']
 
 
 class Mqtt2Prom:
@@ -121,5 +124,5 @@ async def main():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger('gmqtt').setLevel(logging.ERROR)
-    logging.info(f'starting Mqtt2Prom v%s.', __version__)
+    logging.info('starting Mqtt2Prom v%s.', __version__)
     asyncio.run(main())

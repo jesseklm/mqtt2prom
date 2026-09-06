@@ -15,6 +15,6 @@ def run_in_background(coro):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logging.exception("unhandled exception in background task: %s", e)
+            logging.exception('unhandled exception in background task: %s', e)
 
     task.add_done_callback(task_done)

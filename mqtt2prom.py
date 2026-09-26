@@ -16,6 +16,27 @@ with (Path(__file__).parent / 'pyproject.toml').open('rb') as f:
     __version__ = tomllib.load(f)['project']['version']
 
 
+# mqtt topics structure:
+# {
+#     "<MQTT topic>": {
+#         "type": "raw",                # Optional: Message type ("raw" or "json"), defaults to "raw"
+#         "metric_name": "my_metric",   # Optional: Prometheus metric name
+#         "label": "{key=\"value\"}",   # Optional: Static Prometheus labels
+#         "regex": "device",            # Optional: Label name for '+' wildcard topics
+#
+#         # JSON specific options:
+#         "json_filter": [              # Optional: JSON paths to extract
+#             "sensor.temperature",
+#             "sensor.humidity"
+#         ],
+#         "json_names": [               # Optional: Metric names for json_filter values
+#             "temperature",
+#             "humidity"
+#         ],
+#         "json_key_label": "name"      # Optional: Use JSON keys as Prometheus labels
+#     }
+# }
+
 class Mqtt2Prom:
     def __init__(self):
         self.config = get_first_config()
